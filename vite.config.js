@@ -57,6 +57,7 @@ const createCameraProxy = () => {
     res.setHeader('Content-Type', 'multipart/x-mixed-replace; boundary=frame')
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
     res.setHeader('Connection', 'close')
+    res.setHeader('Access-Control-Allow-Origin', '*')
 
     ffmpeg.stdout.pipe(res)
 
@@ -97,4 +98,7 @@ const createCameraProxy = () => {
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), createCameraProxy()],
+  server: {
+    allowedHosts: ['.trycloudflare.com'],
+  },
 })
