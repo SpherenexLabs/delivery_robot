@@ -4,6 +4,7 @@ import {
   saveRecord,
 } from '../services/firebaseDatabase';
 import { detectAndMatchFaces, loadFaceModels } from '../services/faceRecognition';
+import { resolveCameraStreamUrl } from '../services/cameraStream';
 
 const makeAlertId = () => `ALT-${Date.now().toString(36).toUpperCase()}`;
 
@@ -210,27 +211,8 @@ export default function LiveMonitor({ assignments, isWaitingAtDestination = fals
     setError('');
 
     try {
-      const authenticatedUrl = new URL(trimmedUrl);
-
-      if (!['http:', 'https:', 'rtsp:'].includes(authenticatedUrl.protocol)) {
-        throw new Error('Enter a complete RTSP, HTTP, or HTTPS camera URL.');
-      }
-
-      const isLegacyMaizicUrl =
-        authenticatedUrl.protocol === 'http:' &&
-        authenticatedUrl.port === '8080' &&
-        authenticatedUrl.pathname.toLowerCase() === '/video';
-      const streamUrl = isLegacyMaizicUrl
-        ? `rtsp://${authenticatedUrl.username}:${authenticatedUrl.password}@${authenticatedUrl.hostname}:554/stream1`
-        : trimmedUrl;
-      const streamProtocol = new URL(streamUrl).protocol;
-
       await loadFaceModels();
-      setIpStreamUrl(
-        streamProtocol === 'rtsp:'
-          ? `/api/ip-camera/stream?url=${encodeURIComponent(streamUrl)}`
-          : streamUrl,
-      );
+      setIpStreamUrl(resolveCameraStreamUrl(trimmedUrl));
     } catch (modelError) {
       setError(modelError.message || 'Could not connect to the IP camera.');
       setIsStarting(false);

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createFaceDescriptor, loadFaceModels } from '../services/faceRecognition';
+import { resolveCameraStreamUrl } from '../services/cameraStream';
 
 const REQUIRED_FACE_SAMPLES = 3;
 
@@ -117,27 +118,8 @@ export default function ReceiverForm({ existingReceiver, isSaving, onCancel, onS
     setCameraError('');
 
     try {
-      const cameraUrl = new URL(trimmedUrl);
-
-      if (!['http:', 'https:', 'rtsp:'].includes(cameraUrl.protocol)) {
-        throw new Error('Enter a complete RTSP, HTTP, or HTTPS camera URL.');
-      }
-
-      const isLegacyMaizicUrl =
-        cameraUrl.protocol === 'http:' &&
-        cameraUrl.port === '8080' &&
-        cameraUrl.pathname.toLowerCase() === '/video';
-      const streamUrl = isLegacyMaizicUrl
-        ? `rtsp://${cameraUrl.username}:${cameraUrl.password}@${cameraUrl.hostname}:554/stream1`
-        : trimmedUrl;
-      const streamProtocol = new URL(streamUrl).protocol;
-
       await loadFaceModels();
-      setIpStreamUrl(
-        streamProtocol === 'rtsp:'
-          ? `/api/ip-camera/stream?url=${encodeURIComponent(streamUrl)}`
-          : streamUrl,
-      );
+      setIpStreamUrl(resolveCameraStreamUrl(trimmedUrl));
     } catch (error) {
       setCameraError(error.message || 'Could not connect to the IP camera.');
       setIsStartingCamera(false);
