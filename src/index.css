@@ -1,0 +1,262 @@
+/* ============================================================
+   Smart Parcel Delivery Robot — Design System
+   Tokens, reset and base typography.
+   Presentation only: no markup or behaviour depends on this.
+   ============================================================ */
+
+:root {
+  /* Typography ------------------------------------------------ */
+  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Mono", Consolas,
+    "Liberation Mono", monospace;
+
+  /* Surfaces -------------------------------------------------- */
+  --bg: #eaeff6;
+  --bg-tint-a: rgba(13, 148, 136, 0.16);
+  --bg-tint-b: rgba(99, 102, 241, 0.12);
+  --bg-tint-c: rgba(249, 115, 22, 0.08);
+  --surface: #ffffff;
+  --surface-2: #f4f7fb;
+  --surface-3: #ecf1f7;
+  --surface-invert: #0e1a26;
+  --overlay: rgba(255, 255, 255, 0.72);
+
+  /* Lines ----------------------------------------------------- */
+  --border: #dbe3ed;
+  --border-soft: #e8edf4;
+  --border-strong: #c3d0de;
+
+  /* Text ------------------------------------------------------ */
+  --ink: #0d1b2a;
+  --ink-2: #4a5c72;
+  --ink-3: #7c8da3;
+  --ink-invert: #f2f7fb;
+
+  /* Brand ----------------------------------------------------- */
+  --brand: #0d9488;
+  --brand-2: #22c8b6;
+  --brand-deep: #075e56;
+  --brand-ink: #07655d;
+  --brand-tint: #e4f6f4;
+  --brand-tint-2: #d1eeea;
+  --brand-ring: rgba(13, 148, 136, 0.2);
+
+  /* Label colours for filled controls. The dark theme's brand and status
+     fills are bright, so text on them flips to a dark ink. */
+  --on-brand: #ffffff;
+  --on-ok: #ffffff;
+  --on-danger: #ffffff;
+
+  /* Status ---------------------------------------------------- */
+  --ok: #12805c;
+  --ok-ink: #0d6247;
+  --ok-tint: #e5f7ef;
+  --ok-line: #a9e0c8;
+
+  --info: #1461a8;
+  --info-ink: #14538c;
+  --info-tint: #e9f2fd;
+  --info-line: #bdd8f5;
+
+  --warn: #a86408;
+  --warn-ink: #8a5307;
+  --warn-tint: #fdf3e2;
+  --warn-line: #f0d6a0;
+
+  --danger: #c22e22;
+  --danger-ink: #a3251b;
+  --danger-tint: #fdeeec;
+  --danger-line: #f3c3bd;
+
+  /* Geometry -------------------------------------------------- */
+  --r-xs: 8px;
+  --r-sm: 10px;
+  --r-md: 14px;
+  --r-lg: 18px;
+  --r-xl: 24px;
+  --r-pill: 999px;
+
+  /* Elevation ------------------------------------------------- */
+  --shadow-1: 0 1px 2px rgba(13, 27, 42, 0.05), 0 2px 8px rgba(13, 27, 42, 0.045);
+  --shadow-2: 0 2px 4px rgba(13, 27, 42, 0.04), 0 14px 32px rgba(13, 27, 42, 0.08);
+  --shadow-3: 0 30px 70px rgba(13, 27, 42, 0.16);
+  --ring: 0 0 0 4px var(--brand-ring);
+
+  /* Motion ---------------------------------------------------- */
+  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+  --fast: 130ms var(--ease);
+  --base: 190ms var(--ease);
+
+  font-family: var(--font-sans);
+  color: var(--ink);
+  background: var(--bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #070c12;
+    --bg-tint-a: rgba(45, 212, 191, 0.14);
+    --bg-tint-b: rgba(129, 140, 248, 0.12);
+    --bg-tint-c: rgba(251, 146, 60, 0.07);
+    --surface: #101a25;
+    --surface-2: #16212e;
+    --surface-3: #1c2836;
+    --surface-invert: #05090e;
+    --overlay: rgba(16, 26, 37, 0.76);
+
+    --border: #24313f;
+    --border-soft: #1d2836;
+    --border-strong: #33445a;
+
+    --ink: #e9eff7;
+    --ink-2: #a4b5c9;
+    --ink-3: #74879d;
+    --ink-invert: #f2f7fb;
+
+    --brand: #2dd4bf;
+    --brand-2: #6ee7d8;
+    --brand-deep: #0f766e;
+    --brand-ink: #82e9dc;
+    --brand-tint: rgba(45, 212, 191, 0.12);
+    --brand-tint-2: rgba(45, 212, 191, 0.2);
+    --brand-ring: rgba(45, 212, 191, 0.24);
+
+    --on-brand: #032420;
+    --on-ok: #04241a;
+    --on-danger: #2a0a07;
+
+    --ok: #34d399;
+    --ok-ink: #6ee7b7;
+    --ok-tint: rgba(52, 211, 153, 0.12);
+    --ok-line: rgba(52, 211, 153, 0.32);
+
+    --info: #60a5fa;
+    --info-ink: #93c5fd;
+    --info-tint: rgba(96, 165, 250, 0.12);
+    --info-line: rgba(96, 165, 250, 0.32);
+
+    --warn: #fbbf24;
+    --warn-ink: #fcd34d;
+    --warn-tint: rgba(251, 191, 36, 0.12);
+    --warn-line: rgba(251, 191, 36, 0.3);
+
+    --danger: #f87171;
+    --danger-ink: #fca5a5;
+    --danger-tint: rgba(248, 113, 113, 0.12);
+    --danger-line: rgba(248, 113, 113, 0.32);
+
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.3);
+    --shadow-2: 0 2px 4px rgba(0, 0, 0, 0.4), 0 14px 32px rgba(0, 0, 0, 0.45);
+    --shadow-3: 0 30px 70px rgba(0, 0, 0, 0.6);
+
+    color-scheme: dark;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  color: var(--ink);
+  font-family: var(--font-sans);
+  line-height: 1.55;
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(58rem 34rem at 6% -6%, var(--bg-tint-a), transparent 70%),
+    radial-gradient(52rem 30rem at 98% 2%, var(--bg-tint-b), transparent 70%),
+    radial-gradient(46rem 30rem at 50% 108%, var(--bg-tint-c), transparent 70%);
+  background-attachment: fixed;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+  color: var(--ink);
+  font-weight: 750;
+  letter-spacing: -0.022em;
+  line-height: 1.2;
+  text-wrap: balance;
+}
+
+h1 {
+  letter-spacing: -0.04em;
+}
+
+p {
+  margin: 0;
+  text-wrap: pretty;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+::selection {
+  background: var(--brand-tint-2);
+  color: var(--brand-ink);
+}
+
+/* Scrollbars ------------------------------------------------- */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: var(--r-pill);
+  background: var(--border-strong);
+  background-clip: content-box;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
