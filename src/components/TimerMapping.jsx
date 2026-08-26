@@ -50,7 +50,7 @@ const buildInitialEditor = (savedMaps, initialMap) => {
   };
 };
 
-export default function TimerMapping({ assignments = [], initialMap, onDeliveryStatusChanged, onDestinationWaitingChange, onMapSaved, onMapsChanged, onNotice, savedMaps }) {
+export default function TimerMapping({ assignments = [], initialMap, isObstacleSafetyActive = false, onDeliveryStatusChanged, onDestinationWaitingChange, onMapSaved, onMapsChanged, onNotice, savedMaps }) {
   const initialEditor = useMemo(
     () => buildInitialEditor(savedMaps, initialMap),
     [initialMap, savedMaps],
@@ -74,6 +74,8 @@ export default function TimerMapping({ assignments = [], initialMap, onDeliveryS
   const runningRef = useRef(false);
   const recordingRef = useRef(null);
   const assignmentsRef = useRef(assignments);
+  const currentCodeRef = useRef('S');
+  const countdownRef = useRef({ active: false, deadline: 0, onComplete: null, paused: false, remainingMs: 0 });
 
   useEffect(() => {
     assignmentsRef.current = assignments;
@@ -285,6 +287,8 @@ export default function TimerMapping({ assignments = [], initialMap, onDeliveryS
     setActiveIndex(null);
     setRemainingSeconds(0);
     setCurrentCode('S');
+    currentCodeRef.current = 'S';
+    countdownRef.current = { active: false, deadline: 0, onComplete: null, paused: false, remainingMs: 0 };
     recordingRef.current = null;
     onDestinationWaitingChange?.(false);
 
@@ -296,9 +300,70 @@ export default function TimerMapping({ assignments = [], initialMap, onDeliveryS
     }
   };
 
+  const startCountdown = (durationMs, onComplete) => {
+    window.clearTimeout(timeoutRef.current);
+    window.clearInterval(intervalRef.current);
+    const safeDuration = Math.max(0, durationMs);
+    countdownRef.current = {
+      active: true,
+      deadline: Date.now() + safeDuration,
+      onComplete,
+      paused: isObstacleSafetyActive,
+      remainingMs: safeDuration,
+    };
+    setRemainingSeconds(Math.ceil(safeDuration / 1000));
+
+    if (isObstacleSafetyActive) {
+      return;
+    }
+
+    intervalRef.current = window.setInterval(() => {
+      const remainingMs = Math.max(0, countdownRef.current.deadline - Date.now());
+      countdownRef.current.remainingMs = remainingMs;
+      setRemainingSeconds(Math.ceil(remainingMs / 1000));
+    }, 250);
+
+    timeoutRef.current = window.setTimeout(() => {
+      window.clearInterval(intervalRef.current);
+      countdownRef.current.active = false;
+      setRemainingSeconds(0);
+      onComplete();
+    }, safeDuration);
+  };
+
+  useEffect(() => {
+    const countdown = countdownRef.current;
+    if (!runningRef.current || !countdown.active) {
+      return;
+    }
+
+    if (isObstacleSafetyActive && !countdown.paused) {
+      countdown.remainingMs = Math.max(0, countdown.deadline - Date.now());
+      countdown.paused = true;
+      window.clearTimeout(timeoutRef.current);
+      window.clearInterval(intervalRef.current);
+      setRemainingSeconds(Math.ceil(countdown.remainingMs / 1000));
+      writeDirection('S').catch(() => {});
+      onNotice('Obstacle detected: route direction set to S and timer paused.');
+      return;
+    }
+
+    if (!isObstacleSafetyActive && countdown.paused) {
+      const { onComplete, remainingMs } = countdown;
+      countdown.paused = false;
+      writeDirection(currentCodeRef.current)
+        .then(() => {
+          startCountdown(remainingMs, onComplete);
+          onNotice(`Obstacle cleared: direction ${currentCodeRef.current} restored and timer resumed.`);
+        })
+        .catch((error) => onNotice(`Could not resume route: ${error.message}`));
+    }
+  }, [isObstacleSafetyActive]);
+
   const sendTimedStep = async (step, index, onComplete) => {
     setActiveIndex(index);
     setCurrentCode(step.code);
+    currentCodeRef.current = step.code;
     setRemainingSeconds(step.duration);
 
     try {
@@ -309,13 +374,7 @@ export default function TimerMapping({ assignments = [], initialMap, onDeliveryS
       return;
     }
 
-    window.clearInterval(intervalRef.current);
-    intervalRef.current = window.setInterval(() => {
-      setRemainingSeconds((currentSeconds) => Math.max(0, currentSeconds - 1));
-    }, 1000);
-
-    window.clearTimeout(timeoutRef.current);
-    timeoutRef.current = window.setTimeout(onComplete, step.duration * 1000);
+    startCountdown(step.duration * 1000, onComplete);
   };
 
   const runSequence = async (sequence, index, onComplete) => {
@@ -341,16 +400,12 @@ export default function TimerMapping({ assignments = [], initialMap, onDeliveryS
     setRunningMode('waiting_return');
     setActiveIndex(null);
     setCurrentCode('S');
+    currentCodeRef.current = 'S';
     setRemainingSeconds(delay);
     onDestinationWaitingChange?.(true);
     await writeDirection('S');
     await updateDeliveryStatus('arrived', { arrivedAt: new Date().toLocaleString() });
     onNotice(`Outbound path complete. Waiting ${delay} seconds before automatic return.`);
-
-    window.clearInterval(intervalRef.current);
-    intervalRef.current = window.setInterval(() => {
-      setRemainingSeconds((currentSeconds) => Math.max(0, currentSeconds - 1));
-    }, 1000);
 
     const beginReturnAfterCollection = async () => {
       if (!runningRef.current) return;
@@ -373,8 +428,7 @@ export default function TimerMapping({ assignments = [], initialMap, onDeliveryS
       });
     };
 
-    window.clearTimeout(timeoutRef.current);
-    timeoutRef.current = window.setTimeout(beginReturnAfterCollection, delay * 1000);
+    startCountdown(delay * 1000, beginReturnAfterCollection);
   };
 
   const startRun = async () => {
@@ -429,6 +483,7 @@ export default function TimerMapping({ assignments = [], initialMap, onDeliveryS
     setRunningMode('recording');
     setActiveIndex(index);
     setCurrentCode(timedStep.code);
+    currentCodeRef.current = timedStep.code;
     setRemainingSeconds(0);
 
     try {
@@ -707,7 +762,9 @@ export default function TimerMapping({ assignments = [], initialMap, onDeliveryS
                 <span>Status</span>
                 <strong>
                   {isRunning
-                    ? runningMode === 'recording'
+                    ? isObstacleSafetyActive
+                      ? 'Paused for obstacle'
+                      : runningMode === 'recording'
                       ? 'Recording duration'
                       : runningMode === 'waiting_return'
                         ? 'Waiting at destination'

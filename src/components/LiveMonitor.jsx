@@ -8,6 +8,25 @@ import { resolveCameraStreamUrl } from '../services/cameraStream';
 
 const makeAlertId = () => `ALT-${Date.now().toString(36).toUpperCase()}`;
 
+const captureSnapshot = (source, overlay) => {
+  try {
+    const sourceWidth = source.videoWidth || source.naturalWidth;
+    const sourceHeight = source.videoHeight || source.naturalHeight;
+    const maxWidth = 720;
+    const scale = Math.min(1, maxWidth / sourceWidth);
+    const snapshotCanvas = document.createElement('canvas');
+    snapshotCanvas.width = Math.round(sourceWidth * scale);
+    snapshotCanvas.height = Math.round(sourceHeight * scale);
+    const snapshotContext = snapshotCanvas.getContext('2d');
+
+    snapshotContext.drawImage(source, 0, 0, snapshotCanvas.width, snapshotCanvas.height);
+    snapshotContext.drawImage(overlay, 0, 0, snapshotCanvas.width, snapshotCanvas.height);
+    return snapshotCanvas.toDataURL('image/jpeg', 0.72);
+  } catch {
+    return '';
+  }
+};
+
 export default function LiveMonitor({ assignments, isWaitingAtDestination = false, receivers }) {
   const [cameraSource, setCameraSource] = useState('webcam');
   const [ipCameraUrl, setIpCameraUrl] = useState('');
@@ -118,10 +137,13 @@ export default function LiveMonitor({ assignments, isWaitingAtDestination = fals
         if (unknownDetected && !unknownFaceActiveRef.current) {
           unknownFaceActiveRef.current = true;
           const detectedAt = new Date();
+          const snapshot = captureSnapshot(source, canvas);
           const alert = {
             id: makeAlertId(),
             type: 'unknown_person_detected',
             message: 'Unknown person detected by the robot camera.',
+            snapshot,
+            cameraSource,
             resolved: false,
             createdAt: detectedAt.toLocaleString(),
             createdAtMs: detectedAt.getTime(),

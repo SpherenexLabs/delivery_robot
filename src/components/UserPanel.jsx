@@ -46,6 +46,9 @@ export default function UserPanel() {
   const [booking, setBooking] = useState({ itemDetails: '', slot: '', location: '' });
   const [registration, setRegistration] = useState({ name: '', phone: '', email: '', address: '', accessCode: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [notificationPermission, setNotificationPermission] = useState(
+    'Notification' in window ? Notification.permission : 'unsupported',
+  );
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const lastStatusRef = useRef('');
@@ -155,6 +158,15 @@ export default function UserPanel() {
   }, [lookup, receiver, refreshDelivery]);
 
   useEffect(() => {
+    if (receiver?.address) {
+      setBooking((current) => ({
+        ...current,
+        location: current.location || receiver.address,
+      }));
+    }
+  }, [receiver]);
+
+  useEffect(() => {
     const status = selectedAssignment?.status;
     if (!status) {
       return;
@@ -171,6 +183,17 @@ export default function UserPanel() {
       });
     }
 
+    if (
+      status === 'delivered' &&
+      lastStatusRef.current !== 'delivered' &&
+      'Notification' in window &&
+      Notification.permission === 'granted'
+    ) {
+      new Notification('Delivery completed successfully', {
+        body: `Delivery ${selectedAssignment.id} has been collected and confirmed.`,
+      });
+    }
+
     lastStatusRef.current = status;
   }, [selectedAssignment]);
 
@@ -181,6 +204,7 @@ export default function UserPanel() {
     }
 
     const permission = await Notification.requestPermission();
+    setNotificationPermission(permission);
     setMessage(
       permission === 'granted'
         ? 'Arrival notifications enabled.'
@@ -490,9 +514,17 @@ export default function UserPanel() {
           <p>Book an item delivery, track the robot, and verify your identity at secure handoff.</p>
         </div>
         <button className="user-secondary-btn" onClick={enableNotifications} type="button">
-          Enable Notifications
+          {notificationPermission === 'granted' ? 'Notifications Enabled' : 'Enable Notifications'}
         </button>
       </header>
+
+      <section className="user-feature-guide" aria-label="Delivery process">
+        <div><span>1</span><strong>Register</strong><small>Create your profile and secure access PIN.</small></div>
+        <div><span>2</span><strong>Book</strong><small>Choose a slot, item, and registered address.</small></div>
+        <div><span>3</span><strong>Track</strong><small>Follow robot progress and receive arrival alerts.</small></div>
+        <div><span>4</span><strong>Verify</strong><small>Authenticate or review a failed-verification photo.</small></div>
+        <div><span>5</span><strong>Collect</strong><small>Open, collect, and confirm successful delivery.</small></div>
+      </section>
 
       <section className="lookup-section">
         <form className="lookup-form" onSubmit={handleLookup}>
@@ -537,13 +569,17 @@ export default function UserPanel() {
 
       {receiver && (
         <section className="user-card user-action-card">
-          <div className="user-card-heading"><div><span>New request</span><h2>Book a Delivery Slot</h2></div></div>
+          <div className="user-card-heading"><div><span>New request</span><h2>Book a Delivery Slot</h2><p>Enter your item and select the registered address where the robot should arrive.</p></div></div>
           <form className="user-action-form" onSubmit={handleBooking}>
             <input aria-label="Item details" placeholder="Item details" value={booking.itemDetails} onChange={(event) => setBooking({ ...booking, itemDetails: event.target.value })} />
             <input aria-label="Delivery slot" type="datetime-local" value={booking.slot} onChange={(event) => setBooking({ ...booking, slot: event.target.value })} />
-            <input aria-label="Registered delivery location" placeholder="Registered delivery location" value={booking.location} onChange={(event) => setBooking({ ...booking, location: event.target.value })} />
+            <select aria-label="Registered delivery location" value={booking.location} onChange={(event) => setBooking({ ...booking, location: event.target.value })}>
+              <option value="">Select registered delivery address</option>
+              <option value={receiver.address}>{receiver.address}</option>
+            </select>
             <button className="user-primary-btn" disabled={isSubmitting} type="submit">Send Booking</button>
           </form>
+          <p className="registered-location-note"><strong>Registered location:</strong> {receiver.address}</p>
         </section>
       )}
 

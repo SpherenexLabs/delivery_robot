@@ -19,7 +19,7 @@ import {
 } from '../services/firebaseDatabase';
 
 const makeId = (prefix) => `${prefix}-${Date.now().toString(36).toUpperCase()}`;
-const validTabs = new Set(['bookings', 'receivers', 'assignments', 'operations']);
+const validTabs = new Set(['bookings', 'receivers', 'assignments', 'operations', 'alerts']);
 const defaultRobotControl = {
   isRunning: false,
   mode: 'manual',
@@ -70,6 +70,8 @@ export default function AdminPanel() {
   const [timerMaps, setTimerMaps] = useState([]);
   const obstacleActiveRef = useRef(null);
   const safetyUpdatePendingRef = useRef(false);
+  const knownBookingIdsRef = useRef(new Set());
+  const bookingsInitializedRef = useRef(false);
 
   useEffect(() => {
     let shouldUpdate = true;
@@ -83,6 +85,8 @@ export default function AdminPanel() {
           setReceivers(data.receivers);
           setAssignments(data.assignments);
           setBookings(data.bookings || []);
+          knownBookingIdsRef.current = new Set((data.bookings || []).map((booking) => booking.id));
+          bookingsInitializedRef.current = true;
           setAlerts(data.alerts);
           setRobotControl({
             ...defaultRobotControl,
@@ -125,11 +129,27 @@ export default function AdminPanel() {
     const refreshAdminData = async () => {
       try {
         const data = await loadAdminData();
+        const nextBookings = data.bookings || [];
+        if (bookingsInitializedRef.current) {
+          const newBookings = nextBookings.filter(
+            (booking) => booking.status === 'new' && !knownBookingIdsRef.current.has(booking.id),
+          );
+          if (newBookings.length > 0) {
+            setNotice(`${newBookings.length} new delivery booking${newBookings.length > 1 ? 's' : ''} received`);
+            if ('Notification' in window && Notification.permission === 'granted') {
+              new Notification('New delivery booking received', {
+                body: `${newBookings[0].receiverName}: ${newBookings[0].itemDetails}`,
+              });
+            }
+          }
+        }
+        knownBookingIdsRef.current = new Set(nextBookings.map((booking) => booking.id));
+        bookingsInitializedRef.current = true;
         setParcels(data.parcels);
         setReceivers(data.receivers);
         setAssignments(data.assignments);
         setAlerts(data.alerts);
-        setBookings(data.bookings || []);
+        setBookings(nextBookings);
         setTimerMaps(data.timerMaps);
       } catch {
         // The main Firebase status already reports connection failures.
@@ -494,6 +514,7 @@ export default function AdminPanel() {
       deliverySlot: booking.slot,
       bookingId: booking.id,
       status: 'pending',
+      itemLoaded: false,
       createdAt: new Date().toLocaleDateString(),
       createdAtMs,
     };
@@ -507,6 +528,22 @@ export default function AdminPanel() {
       setAssignments((current) => [assignment, ...current]);
       setBookings((current) => current.map((item) => item.id === booking.id ? { ...item, status: 'approved', assignmentId: assignment.id } : item));
     }, `Booking ${booking.id} approved and assigned`);
+  };
+
+  const handleItemLoaded = async (assignment) => {
+    const loadedAt = new Date().toLocaleString();
+    await runFirebaseAction(async () => {
+      await Promise.all([
+        updateRecord('assignments', assignment.id, { itemLoaded: true, itemLoadedAt: loadedAt }),
+        updateRecord('parcels', assignment.parcelId, { status: 'loaded', loadedAt }),
+      ]);
+      setAssignments((current) => current.map((item) =>
+        item.id === assignment.id ? { ...item, itemLoaded: true, itemLoadedAt: loadedAt } : item,
+      ));
+      setParcels((current) => current.map((item) =>
+        item.id === assignment.parcelId ? { ...item, status: 'loaded', loadedAt } : item,
+      ));
+    }, `Item loaded into robot for ${assignment.id}`);
   };
 
   const dismissAlert = async (alertId) => {
@@ -523,11 +560,15 @@ export default function AdminPanel() {
     }, 'Alert marked as resolved');
   };
 
+  const unknownPersonAlerts = alerts.filter(
+    (alert) => alert.type === 'unknown_person_detected' && Boolean(alert.snapshot),
+  );
   const tabs = [
     { id: 'bookings', label: 'Delivery Bookings', icon: 'box', count: bookings.filter((booking) => booking.status === 'new').length },
     { id: 'receivers', label: 'Registered Users', icon: 'person', count: receivers.length },
     { id: 'assignments', label: 'Delivery Queue', icon: 'route', count: assignments.length },
     { id: 'operations', label: 'Route & Live Monitor', icon: 'camera', count: timerMaps.length },
+    { id: 'alerts', label: 'Alerts & Snapshots', icon: 'alert', count: unknownPersonAlerts.filter((alert) => !alert.resolved).length },
   ];
 
   return (
@@ -596,23 +637,32 @@ export default function AdminPanel() {
 
       {notice && <div className="notice">{notice}</div>}
       {isSaving && <div className="notice saving">Saving to Firebase...</div>}
-      {alerts.some((alert) => !alert.resolved) && (
+      {unknownPersonAlerts.some((alert) => !alert.resolved) && (
         <section className="admin-alerts" aria-label="Authentication alerts">
           <div className="alerts-heading">
             <div>
               <strong>Authentication Alerts</strong>
-              <span>{alerts.filter((alert) => !alert.resolved).length} require attention</span>
+              <span>{unknownPersonAlerts.filter((alert) => !alert.resolved).length} require attention</span>
             </div>
           </div>
-          {alerts
+          {unknownPersonAlerts
             .filter((alert) => !alert.resolved)
             .slice(0, 3)
             .map((alert) => (
               <div className="admin-alert-item" key={alert.id}>
-                <div>
-                  <strong>{alert.receiverName || 'Unknown receiver'}</strong>
-                  <span>{alert.message}</span>
-                  <small>{alert.createdAt}</small>
+                <div className="admin-alert-details">
+                  {alert.snapshot && (
+                    <img
+                      alt={`Unknown person detected at ${alert.createdAt}`}
+                      className="admin-alert-snapshot"
+                      src={alert.snapshot}
+                    />
+                  )}
+                  <div>
+                    <strong>{alert.receiverName || 'Unknown receiver'}</strong>
+                    <span>{alert.message}</span>
+                    <small>{alert.createdAt}</small>
+                  </div>
                 </div>
                 <button className="secondary-btn" onClick={() => dismissAlert(alert.id)} type="button">
                   Resolve
@@ -793,6 +843,26 @@ export default function AdminPanel() {
                           <p>{assignment.receiverFaceImage ? 'Face auth ready' : 'Face image missing'}</p>
                         </div>
                       </div>
+                      <div className={`item-loading-status ${assignment.itemLoaded ? 'loaded' : ''}`}>
+                        <div>
+                          <strong>{assignment.itemLoaded ? 'Item loaded in robot' : 'Item placement required'}</strong>
+                          <span>
+                            {assignment.itemLoaded
+                              ? `Confirmed ${assignment.itemLoadedAt || ''}`
+                              : 'Place the requested item inside the compartment before starting delivery.'}
+                          </span>
+                        </div>
+                        {!assignment.itemLoaded && (
+                          <button
+                            className="secondary-btn"
+                            disabled={isSaving}
+                            onClick={() => handleItemLoaded(assignment)}
+                            type="button"
+                          >
+                            Confirm Item Loaded
+                          </button>
+                        )}
+                      </div>
                       {assignment.notes && <p className="notes">{assignment.notes}</p>}
                       <div className="assignment-status-row">
                         <span className="status-badge">{assignment.status}</span>
@@ -844,6 +914,7 @@ export default function AdminPanel() {
             <TimerMapping
               assignments={assignments}
               initialMap={timerMap}
+              isObstacleSafetyActive={isObstacleSafetyActive}
               onDeliveryStatusChanged={(assignmentId, updates) =>
                 setAssignments((current) =>
                   current.map((assignment) =>
@@ -860,6 +931,52 @@ export default function AdminPanel() {
               )}
             </section>
           </div>
+        )}
+
+        {activeTab === 'alerts' && (
+          <section className="list-section alerts-dashboard">
+            <div className="alerts-dashboard-heading">
+              <div>
+                <span className="operations-kicker">Security history</span>
+                <h2>Alerts & Unknown-Person Snapshots</h2>
+              </div>
+              <span>{unknownPersonAlerts.filter((alert) => !alert.resolved).length} unresolved</span>
+            </div>
+
+            {unknownPersonAlerts.length === 0 ? (
+              <p className="empty-state">No unknown-person snapshots have been captured yet. Start Live Monitor to capture the next unknown detection.</p>
+            ) : (
+              <div className="alert-history-grid">
+                {unknownPersonAlerts.map((alert) => (
+                  <article className="alert-history-card" key={alert.id}>
+                    <img
+                      alt={`Detection recorded at ${alert.createdAt}`}
+                      className="alert-history-snapshot"
+                      src={alert.snapshot}
+                    />
+                    <div className="alert-history-content">
+                      <div className="card-header">
+                        <div>
+                          <span className="record-id">{alert.id}</span>
+                          <h3>{alert.receiverName || 'Unknown person'}</h3>
+                        </div>
+                        <span className="status-badge">
+                          {alert.resolved ? 'Resolved' : 'Unresolved'}
+                        </span>
+                      </div>
+                      <p>{alert.message}</p>
+                      <small>{alert.createdAt}{alert.cameraSource ? ` · ${alert.cameraSource} camera` : ''}</small>
+                      {!alert.resolved && (
+                        <button className="secondary-btn" onClick={() => dismissAlert(alert.id)} type="button">
+                          Mark as resolved
+                        </button>
+                      )}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
         )}
       </section>
     </main>
@@ -926,6 +1043,9 @@ function Icon({ name }) {
     ),
     camera: (
       <path d="M9 4 7.5 6H5a3 3 0 0 0-3 3v8a3 3 0 0 0 3 3h14a3 3 0 0 0 3-3V9a3 3 0 0 0-3-3h-2.5L15 4H9Zm3 13a4 4 0 1 1 0-8 4 4 0 0 1 0 8Zm0-2a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" />
+    ),
+    alert: (
+      <path d="M12 2 1.8 20h20.4L12 2Zm0 5.2 6.8 10.8H5.2L12 7.2ZM11 10v4h2v-4h-2Zm0 5.5v2h2v-2h-2Z" />
     ),
     timer: (
       <path d="M11 2h4v2h-4V2Zm1 12h2V8h-2v6Zm1 8a9 9 0 1 1 6.36-15.36l1.5-1.5 1.42 1.42-1.6 1.6A9 9 0 0 1 13 22Zm0-2a7 7 0 1 0 0-14 7 7 0 0 0 0 14Z" />
