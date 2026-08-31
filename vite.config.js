@@ -3,13 +3,17 @@ import react from '@vitejs/plugin-react'
 import { spawn } from 'node:child_process'
 
 const createCameraProxy = () => {
-  let activeProcess = null
+  // Keyed by camera URL so unrelated viewers (different tabs, Live Monitor vs
+  // Receiver Face Registration, etc.) don't kill each other's stream. Only a
+  // second request for the SAME camera URL replaces the earlier process.
+  const activeProcesses = new Map()
 
-  const stopActiveProcess = () => {
-    if (activeProcess && !activeProcess.killed) {
-      activeProcess.kill()
+  const stopProcessFor = (cameraUrl) => {
+    const process = activeProcesses.get(cameraUrl)
+    if (process && !process.killed) {
+      process.kill()
     }
-    activeProcess = null
+    activeProcesses.delete(cameraUrl)
   }
 
   const handleRequest = (req, res, next) => {
@@ -28,7 +32,7 @@ const createCameraProxy = () => {
       return
     }
 
-    stopActiveProcess()
+    stopProcessFor(cameraUrl)
 
     const ffmpeg = spawn('ffmpeg', [
       '-hide_banner',
@@ -52,25 +56,30 @@ const createCameraProxy = () => {
       windowsHide: true,
     })
 
-    activeProcess = ffmpeg
+    activeProcesses.set(cameraUrl, ffmpeg)
     res.statusCode = 200
     res.setHeader('Content-Type', 'multipart/x-mixed-replace; boundary=frame')
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
     res.setHeader('Connection', 'close')
     res.setHeader('Access-Control-Allow-Origin', '*')
 
+    ffmpeg.stderr.on('data', (chunk) => {
+      console.error(`[rtsp-camera-proxy] ffmpeg: ${chunk}`)
+    })
+
     ffmpeg.stdout.pipe(res)
 
     const cleanup = () => {
-      if (activeProcess === ffmpeg) {
-        stopActiveProcess()
+      if (activeProcesses.get(cameraUrl) === ffmpeg) {
+        stopProcessFor(cameraUrl)
       } else if (!ffmpeg.killed) {
         ffmpeg.kill()
       }
     }
 
     req.on('close', cleanup)
-    ffmpeg.on('error', () => {
+    ffmpeg.on('error', (error) => {
+      console.error('[rtsp-camera-proxy] Failed to start ffmpeg:', error.message)
       if (!res.writableEnded) {
         res.end()
       }
