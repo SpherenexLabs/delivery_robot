@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createFaceDescriptor, loadFaceModels } from '../services/faceRecognition';
-import { resolveCameraStreamUrl } from '../services/cameraStream';
+import { describeCameraError, listVideoInputDevices, openWebcamStream, resolveCameraStreamUrl } from '../services/cameraStream';
 
 const REQUIRED_FACE_SAMPLES = 3;
 
@@ -30,6 +30,8 @@ export default function ReceiverForm({ existingReceiver, isSaving, onCancel, onS
     faceRegisteredAt: '',
   }));
   const [cameraSource, setCameraSource] = useState('webcam');
+  const [videoDevices, setVideoDevices] = useState([]);
+  const [cameraDeviceIndex, setCameraDeviceIndex] = useState(0);
   const [ipCameraUrl, setIpCameraUrl] = useState('');
   const [ipStreamUrl, setIpStreamUrl] = useState('');
   const [cameraError, setCameraError] = useState('');
@@ -61,6 +63,18 @@ export default function ReceiverForm({ existingReceiver, isSaving, onCancel, onS
     streamRef.current?.getTracks().forEach((track) => track.stop());
   }, []);
 
+  useEffect(() => {
+    listVideoInputDevices().then(setVideoDevices).catch(() => {});
+
+    if (!navigator.mediaDevices?.addEventListener) {
+      return undefined;
+    }
+
+    const refreshDevices = () => listVideoInputDevices().then(setVideoDevices).catch(() => {});
+    navigator.mediaDevices.addEventListener('devicechange', refreshDevices);
+    return () => navigator.mediaDevices.removeEventListener('devicechange', refreshDevices);
+  }, []);
+
   const handleChange = (event) => {
     const { name, value } = event.target;
     setFormData((currentData) => ({
@@ -81,15 +95,9 @@ export default function ReceiverForm({ existingReceiver, isSaving, onCancel, onS
 
     try {
       await loadFaceModels();
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: {
-          facingMode: 'user',
-          width: { ideal: 640 },
-          height: { ideal: 480 },
-        },
-      });
+      const { stream, devices } = await openWebcamStream(cameraDeviceIndex, { width: 640, height: 480 });
 
+      setVideoDevices(devices);
       streamRef.current = stream;
 
       if (videoRef.current) {
@@ -98,8 +106,8 @@ export default function ReceiverForm({ existingReceiver, isSaving, onCancel, onS
       }
 
       setIsCameraActive(true);
-    } catch {
-      window.alert('Could not access the camera. Please allow camera permission and try again.');
+    } catch (webcamError) {
+      window.alert(describeCameraError(webcamError));
     } finally {
       setIsStartingCamera(false);
     }
@@ -316,6 +324,20 @@ export default function ReceiverForm({ existingReceiver, isSaving, onCancel, onS
               IP Camera
             </button>
           </div>
+          {cameraSource === 'webcam' && (
+            <label className="ip-camera-field" htmlFor="receiverCameraDeviceIndex">
+              <span>Webcam Selection</span>
+              <select
+                disabled={isCameraActive || isStartingCamera}
+                id="receiverCameraDeviceIndex"
+                onChange={(event) => setCameraDeviceIndex(Number(event.target.value))}
+                value={cameraDeviceIndex}
+              >
+                <option value={0}>Camera 0{videoDevices[0]?.label ? ` - ${videoDevices[0].label}` : ''}</option>
+                <option value={1}>Camera 1{videoDevices[1]?.label ? ` - ${videoDevices[1].label}` : ''}</option>
+              </select>
+            </label>
+          )}
           {cameraSource === 'ip' && (
             <label className="ip-camera-field" htmlFor="receiverIpCameraUrl">
               <span>IP Camera URL With Login</span>

@@ -1,13 +1,27 @@
 import { useState } from 'react'
 import AdminPanel from './components/AdminPanel'
+import LocationTracker from './components/LocationTracker'
 import UserPanel from './components/UserPanel'
 import './App.css'
 
-const getInitialPanel = () =>
-  new URLSearchParams(window.location.search).get('panel') === 'user' ? 'user' : 'admin'
+const getInitialPanel = () => {
+  const requestedPanel = new URLSearchParams(window.location.search).get('panel')
+  if (requestedPanel === 'user' || requestedPanel === 'tracker') {
+    return requestedPanel
+  }
+  return 'admin'
+}
 
 function App() {
   const [activePanel, setActivePanel] = useState(getInitialPanel)
+
+  if (activePanel === 'tracker') {
+    return (
+      <div className="app-shell">
+        <LocationTracker />
+      </div>
+    )
+  }
 
   return (
     <div className="app-shell">

@@ -1,0 +1,67 @@
+.tracker-page {
+  display: grid;
+  gap: 18px;
+  max-width: 420px;
+  margin: 0 auto;
+  padding: 32px 20px 60px;
+  text-align: center;
+}
+
+.tracker-page h1 {
+  font-size: 1.3rem;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+}
+
+.tracker-page > p {
+  color: var(--ink-2);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.tracker-btn {
+  padding: 16px 20px;
+  border: none;
+  border-radius: var(--r-md);
+  background: var(--brand);
+  color: var(--on-brand, #fff);
+  font-size: 1rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.tracker-btn:active {
+  opacity: 0.85;
+}
+
+.tracker-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  text-align: left;
+}
+
+.tracker-live-dot {
+  flex: 0 0 auto;
+  margin-top: 6px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--ok);
+  box-shadow: 0 0 0 3px var(--ok-tint);
+}
+
+.tracker-status p {
+  margin: 2px 0 0;
+  color: var(--ink-2);
+  font-size: 0.82rem;
+}
+
+.tracker-note {
+  color: var(--ink-3);
+  font-size: 0.78rem;
+}

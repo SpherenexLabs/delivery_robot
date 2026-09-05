@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import './AdminPanel.css';
 import LiveMonitor from './LiveMonitor';
+import LocationMap from './LocationMap';
 import ParcelForm from './ParcelForm';
 import ParcelList from './ParcelList';
+import ReceiverEditForm from './ReceiverEditForm';
 import ReceiverForm from './ReceiverForm';
 import RobotControl from './RobotControl';
 import TimerMapping from './TimerMapping';
@@ -53,6 +55,7 @@ export default function AdminPanel() {
   const [bookings, setBookings] = useState([]);
   const [bookingRoutes, setBookingRoutes] = useState({});
   const [faceReceiver, setFaceReceiver] = useState(null);
+  const [editingReceiver, setEditingReceiver] = useState(null);
   const [alerts, setAlerts] = useState([]);
   const [activeTab, setActiveTab] = useState(getInitialTab);
   const [notice, setNotice] = useState('');
@@ -352,6 +355,24 @@ export default function AdminPanel() {
     }, `Face registration completed for ${receiverData.name}`);
   };
 
+  const handleUpdateReceiverDetails = async (receiverData) => {
+    await runFirebaseAction(async () => {
+      const detailUpdates = {
+        name: receiverData.name,
+        phone: receiverData.phone,
+        email: receiverData.email,
+        address: receiverData.address,
+        city: receiverData.city,
+        zipCode: receiverData.zipCode,
+        accessCode: receiverData.accessCode,
+        notes: receiverData.notes,
+      };
+      await updateRecord('receivers', receiverData.id, detailUpdates);
+      setReceivers((current) => current.map((receiver) => receiver.id === receiverData.id ? { ...receiver, ...detailUpdates } : receiver));
+      setEditingReceiver(null);
+    }, `Receiver details updated for ${receiverData.name}`);
+  };
+
   const handleDeleteParcel = async (parcelId) => {
     const assignmentIds = assignments
       .filter((assignment) => assignment.parcelId === parcelId)
@@ -610,6 +631,8 @@ export default function AdminPanel() {
         updatedAt={telemetryUpdatedAt}
       />
 
+      <LocationMap />
+
       <RobotControl
         control={robotControl}
         disabled={isLoading || isRobotSaving || isObstacleSafetyActive}
@@ -687,16 +710,32 @@ export default function AdminPanel() {
                     <div><dt>Slot</dt><dd>{booking.slot}</dd></div>
                     <div><dt>Location</dt><dd>{booking.location}</dd></div>
                   </div>
-                  {booking.status === 'new' && (
-                    <div className="booking-actions">
-                      <select aria-label={`Route for ${booking.id}`} value={bookingRoutes[booking.id] || timerMaps[0]?.id || ''} onChange={(event) => setBookingRoutes((current) => ({ ...current, [booking.id]: event.target.value }))}>
-                        <option value="">Select delivery route</option>
-                        {timerMaps.map((map) => <option key={map.id} value={map.id}>{map.name}</option>)}
-                      </select>
-                      <button className="submit-btn" onClick={() => handleBookingDecision(booking, true)} type="button">Approve & Assign</button>
-                      <button className="secondary-btn" onClick={() => handleBookingDecision(booking, false)} type="button">Reject</button>
-                    </div>
-                  )}
+                  {booking.status === 'new' && (() => {
+                    const bookingReceiver = receivers.find((item) => item.id === booking.receiverId);
+                    const selectedRouteId = bookingRoutes[booking.id] || timerMaps[0]?.id || '';
+                    const selectedRoute = timerMaps.find((item) => item.id === selectedRouteId);
+                    const blockReason = !bookingReceiver
+                      ? 'No matching receiver record found for this booking.'
+                      : !hasFaceRegistration(bookingReceiver)
+                        ? `Register ${bookingReceiver.name}'s face in Registered Users before approving.`
+                        : !selectedRoute
+                          ? 'Create and select a delivery route below before approving.'
+                          : !selectedRoute.returnSteps?.some((step) => Number(step.duration) > 0)
+                            ? `"${selectedRoute.name}" has no saved return path yet — record and save one in Route & Live Monitor.`
+                            : '';
+
+                    return (
+                      <div className="booking-actions">
+                        <select aria-label={`Route for ${booking.id}`} value={selectedRouteId} onChange={(event) => setBookingRoutes((current) => ({ ...current, [booking.id]: event.target.value }))}>
+                          <option value="">Select delivery route</option>
+                          {timerMaps.map((map) => <option key={map.id} value={map.id}>{map.name}</option>)}
+                        </select>
+                        {blockReason && <p className="booking-block-reason">{blockReason}</p>}
+                        <button className="submit-btn" disabled={Boolean(blockReason) || isSaving} onClick={() => handleBookingDecision(booking, true)} type="button">Approve & Assign</button>
+                        <button className="secondary-btn" onClick={() => handleBookingDecision(booking, false)} type="button">Reject</button>
+                      </div>
+                    );
+                  })()}
                 </article>
               ))}
             </div>
@@ -723,6 +762,13 @@ export default function AdminPanel() {
                 <h2>Register Face for {faceReceiver.name}</h2>
                 <p>The user details below came from the User Panel and cannot be changed here.</p>
                 <ReceiverForm existingReceiver={faceReceiver} isSaving={isSaving || isLoading} key={faceReceiver.id} onCancel={() => setFaceReceiver(null)} onSaveReceiver={handleSaveReceiverFace} />
+              </section>
+            )}
+            {editingReceiver && (
+              <section className="form-section">
+                <h2>Edit {editingReceiver.name}</h2>
+                <p>Update contact and delivery details. Face registration is managed separately.</p>
+                <ReceiverEditForm existingReceiver={editingReceiver} isSaving={isSaving || isLoading} key={editingReceiver.id} onCancel={() => setEditingReceiver(null)} onSaveReceiver={handleUpdateReceiverDetails} />
               </section>
             )}
             <section className="list-section">
@@ -786,9 +832,14 @@ export default function AdminPanel() {
                       </dl>
                       {receiver.notes && <p className="notes">{receiver.notes}</p>}
                       <p className="created-at">Added {receiver.createdAt}</p>
-                      <button className="secondary-btn" onClick={() => setFaceReceiver(receiver)} type="button">
-                        {hasFaceRegistration(receiver) ? 'Re-register Face' : 'Register Face'}
-                      </button>
+                      <div className="form-actions">
+                        <button className="secondary-btn" onClick={() => { setFaceReceiver(null); setEditingReceiver(receiver); }} type="button">
+                          Edit
+                        </button>
+                        <button className="secondary-btn" onClick={() => { setEditingReceiver(null); setFaceReceiver(receiver); }} type="button">
+                          {hasFaceRegistration(receiver) ? 'Re-register Face' : 'Register Face'}
+                        </button>
+                      </div>
                     </article>
                   ))
                 )}

@@ -197,7 +197,7 @@ export default function TimerMapping({ assignments = [], initialMap, isObstacleS
     onMapsChanged(nextMaps);
   };
 
-  const handleSaveMap = async (nextSteps = activeSteps) => {
+  const handleSaveMap = async (nextSteps = activeSteps, { forceNewMap = false } = {}) => {
     const activeMapSteps = Array.isArray(nextSteps) ? nextSteps : activeSteps;
     const mapSteps = routePhase === 'outbound' ? activeMapSteps : steps;
     const mapReturnSteps = routePhase === 'return' ? activeMapSteps : returnSteps;
@@ -215,7 +215,7 @@ export default function TimerMapping({ assignments = [], initialMap, isObstacleS
       return null;
     }
 
-    const mapId = selectedMapId || createMapId();
+    const mapId = forceNewMap ? createMapId() : (selectedMapId || createMapId());
     const updatedAt = new Date();
     const savedMap = {
       id: mapId,
@@ -251,6 +251,10 @@ export default function TimerMapping({ assignments = [], initialMap, isObstacleS
 
   const handleSaveButton = () => {
     handleSaveMap();
+  };
+
+  const handleSaveAsNewButton = () => {
+    handleSaveMap(activeSteps, { forceNewMap: true });
   };
 
   const deleteMap = async (mapId) => {
@@ -423,7 +427,15 @@ export default function TimerMapping({ assignments = [], initialMap, isObstacleS
       setRoutePhase('return');
       setRunningMode('return_route');
       runSequence(savedReturnSteps, 0, async () => {
-        await updateDeliveryStatus('returned', { returnedAt: new Date().toLocaleString() });
+        const returnedAt = new Date().toLocaleString();
+        await updateDeliveryStatus('returned', { returnedAt });
+        await updateRecord('doorControl', 'current', {
+          assignmentId: selectedDeliveryId,
+          command: 'close',
+          isOpen: false,
+          updatedAt: returnedAt,
+          updatedAtMs: Date.now(),
+        });
         await finishRun('Round trip complete at starting point');
       });
     };
@@ -805,8 +817,13 @@ export default function TimerMapping({ assignments = [], initialMap, isObstacleS
                   </button>
                 )}
                 <button className="secondary-btn" disabled={isRunning || isSaving || isApplying} onClick={handleSaveButton} type="button">
-                  {isApplying ? 'Applying...' : 'Save Map'}
+                  {isApplying ? 'Applying...' : selectedMapId ? 'Update Map' : 'Save Map'}
                 </button>
+                {selectedMapId && (
+                  <button className="secondary-btn" disabled={isRunning || isSaving || isApplying} onClick={handleSaveAsNewButton} type="button">
+                    Save as New Map
+                  </button>
+                )}
               </div>
             </aside>
           </div>

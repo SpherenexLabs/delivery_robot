@@ -25,8 +25,8 @@ const toRobotTelemetry = (data) => ({
   voltage: data?.Voltage ?? null,
 });
 
-const toList = (records) =>
-  Object.values(records || {}).sort((first, second) => (second.createdAtMs || 0) - (first.createdAtMs || 0));
+const toList = (records, sortField = 'createdAtMs') =>
+  Object.values(records || {}).sort((first, second) => (second[sortField] || 0) - (first[sortField] || 0));
 
 const request = async (path, options = {}) => {
   const method = options.method || 'GET';
@@ -87,7 +87,7 @@ export const loadAdminData = async () => {
     robotControl: data?.robotControl?.current || null,
     doorControl: data?.doorControl?.current || null,
     timerMap: data?.timerMap?.current || null,
-    timerMaps: toList(data?.timerMaps),
+    timerMaps: toList(data?.timerMaps, 'updatedAtMs'),
   };
 };
 
@@ -107,6 +107,20 @@ export const deleteRecord = (collection, id) =>
   request(`${collection}/${id}`, {
     method: 'DELETE',
   });
+
+export const writeDeviceLocation = (coords) =>
+  request('robotLocation/current', {
+    method: 'PUT',
+    body: JSON.stringify({
+      latitude: coords.latitude,
+      longitude: coords.longitude,
+      accuracy: coords.accuracy ?? null,
+      updatedAt: new Date().toLocaleString(),
+      updatedAtMs: Date.now(),
+    }),
+  });
+
+export const loadDeviceLocation = () => request('robotLocation/current');
 
 export const loadAlerts = async () => toList(await request('alerts'));
 

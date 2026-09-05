@@ -4,7 +4,7 @@ import {
   saveRecord,
 } from '../services/firebaseDatabase';
 import { detectAndMatchFaces, loadFaceModels } from '../services/faceRecognition';
-import { resolveCameraStreamUrl } from '../services/cameraStream';
+import { describeCameraError, listVideoInputDevices, openWebcamStream, resolveCameraStreamUrl } from '../services/cameraStream';
 
 const makeAlertId = () => `ALT-${Date.now().toString(36).toUpperCase()}`;
 
@@ -29,6 +29,8 @@ const captureSnapshot = (source, overlay) => {
 
 export default function LiveMonitor({ assignments, isWaitingAtDestination = false, receivers }) {
   const [cameraSource, setCameraSource] = useState('webcam');
+  const [videoDevices, setVideoDevices] = useState([]);
+  const [cameraDeviceIndex, setCameraDeviceIndex] = useState(0);
   const [ipCameraUrl, setIpCameraUrl] = useState('');
   const [ipStreamUrl, setIpStreamUrl] = useState('');
   const [isActive, setIsActive] = useState(false);
@@ -69,6 +71,18 @@ export default function LiveMonitor({ assignments, isWaitingAtDestination = fals
 
   useEffect(() => () => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
+  }, []);
+
+  useEffect(() => {
+    listVideoInputDevices().then(setVideoDevices).catch(() => {});
+
+    if (!navigator.mediaDevices?.addEventListener) {
+      return undefined;
+    }
+
+    const refreshDevices = () => listVideoInputDevices().then(setVideoDevices).catch(() => {});
+    navigator.mediaDevices.addEventListener('devicechange', refreshDevices);
+    return () => navigator.mediaDevices.removeEventListener('devicechange', refreshDevices);
   }, []);
 
   useEffect(() => {
@@ -200,21 +214,15 @@ export default function LiveMonitor({ assignments, isWaitingAtDestination = fals
 
     try {
       await loadFaceModels();
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: {
-          facingMode: 'user',
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
-      });
+      const { stream, devices } = await openWebcamStream(cameraDeviceIndex, { width: 1280, height: 720 });
 
+      setVideoDevices(devices);
       streamRef.current = stream;
       videoRef.current.srcObject = stream;
       await videoRef.current.play();
       setIsActive(true);
-    } catch {
-      setError('Could not start the live camera. Allow camera permission and try again.');
+    } catch (webcamError) {
+      setError(describeCameraError(webcamError));
       stopMonitor();
     } finally {
       setIsStarting(false);
@@ -299,6 +307,20 @@ export default function LiveMonitor({ assignments, isWaitingAtDestination = fals
             IP Camera
           </button>
         </div>
+        {cameraSource === 'webcam' && (
+          <label className="ip-camera-field" htmlFor="cameraDeviceIndex">
+            <span>Webcam Selection</span>
+            <select
+              disabled={isActive || isStarting}
+              id="cameraDeviceIndex"
+              onChange={(event) => setCameraDeviceIndex(Number(event.target.value))}
+              value={cameraDeviceIndex}
+            >
+              <option value={0}>Camera 0{videoDevices[0]?.label ? ` - ${videoDevices[0].label}` : ''}</option>
+              <option value={1}>Camera 1{videoDevices[1]?.label ? ` - ${videoDevices[1].label}` : ''}</option>
+            </select>
+          </label>
+        )}
         {cameraSource === 'ip' && (
           <label className="ip-camera-field" htmlFor="ipCameraUrl">
             <span>IP Camera URL With Login</span>

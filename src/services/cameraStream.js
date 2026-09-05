@@ -35,3 +35,50 @@ export const resolveCameraStreamUrl = (inputUrl) => {
 
   return streamUrl;
 };
+
+const CAMERA_ERROR_HINTS = {
+  NotAllowedError: 'Camera permission is blocked. Click the camera icon in the address bar (or check Windows Settings > Privacy & security > Camera) and allow access for this site, then reload.',
+  NotFoundError: 'No camera was found. Check that a webcam is connected and enabled.',
+  NotReadableError: 'The camera is already in use by another app or browser tab. Close it and try again.',
+  OverconstrainedError: 'The selected camera does not support the requested settings. Try a different camera.',
+  SecurityError: 'Camera access is blocked by the browser for this page.',
+};
+
+export const describeCameraError = (error) => {
+  const hint = CAMERA_ERROR_HINTS[error?.name];
+  if (hint) {
+    return hint;
+  }
+  return error?.message || 'Could not access the camera. Please allow camera permission and try again.';
+};
+
+export const listVideoInputDevices = async () => {
+  if (!navigator.mediaDevices?.enumerateDevices) {
+    return [];
+  }
+
+  const devices = await navigator.mediaDevices.enumerateDevices();
+  return devices.filter((device) => device.kind === 'videoinput');
+};
+
+export const openWebcamStream = async (deviceIndex, { width = 640, height = 480 } = {}) => {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    throw new Error('Camera access is not supported in this browser.');
+  }
+
+  const devices = await listVideoInputDevices();
+  const selectedDevice = devices[deviceIndex];
+
+  if (devices.length > 0 && !selectedDevice) {
+    throw new Error(`Camera ${deviceIndex} was not found. Only ${devices.length} camera(s) detected.`);
+  }
+
+  const videoConstraints = selectedDevice
+    ? { deviceId: { exact: selectedDevice.deviceId }, width: { ideal: width }, height: { ideal: height } }
+    : { facingMode: 'user', width: { ideal: width }, height: { ideal: height } };
+
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: videoConstraints });
+  const devicesWithLabels = await listVideoInputDevices();
+
+  return { stream, devices: devicesWithLabels };
+};

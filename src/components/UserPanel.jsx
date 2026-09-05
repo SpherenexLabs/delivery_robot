@@ -7,6 +7,8 @@ import {
   updateRecord,
 } from '../services/firebaseDatabase';
 import { detectAndMatchFaces, loadFaceModels } from '../services/faceRecognition';
+import { describeCameraError, listVideoInputDevices, openWebcamStream } from '../services/cameraStream';
+import LocationMap from './LocationMap';
 import './UserPanel.css';
 
 const statusSteps = [
@@ -42,6 +44,8 @@ export default function UserPanel() {
   const [authResult, setAuthResult] = useState(null);
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [isCameraStarting, setIsCameraStarting] = useState(false);
+  const [videoDevices, setVideoDevices] = useState([]);
+  const [cameraDeviceIndex, setCameraDeviceIndex] = useState(0);
   const [isVerifying, setIsVerifying] = useState(false);
   const [booking, setBooking] = useState({ itemDetails: '', slot: '', location: '' });
   const [registration, setRegistration] = useState({ name: '', phone: '', email: '', address: '', accessCode: '' });
@@ -74,6 +78,18 @@ export default function UserPanel() {
 
   useEffect(() => () => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
+  }, []);
+
+  useEffect(() => {
+    listVideoInputDevices().then(setVideoDevices).catch(() => {});
+
+    if (!navigator.mediaDevices?.addEventListener) {
+      return undefined;
+    }
+
+    const refreshDevices = () => listVideoInputDevices().then(setVideoDevices).catch(() => {});
+    navigator.mediaDevices.addEventListener('devicechange', refreshDevices);
+    return () => navigator.mediaDevices.removeEventListener('devicechange', refreshDevices);
   }, []);
 
   const findReceiverData = useCallback((data, searchValue) => {
@@ -301,21 +317,15 @@ export default function UserPanel() {
 
     try {
       await loadFaceModels();
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: {
-          facingMode: 'user',
-          width: { ideal: 640 },
-          height: { ideal: 480 },
-        },
-      });
+      const { stream, devices } = await openWebcamStream(cameraDeviceIndex, { width: 640, height: 480 });
 
+      setVideoDevices(devices);
       streamRef.current = stream;
       videoRef.current.srcObject = stream;
       await videoRef.current.play();
       setIsCameraActive(true);
-    } catch {
-      setMessage('Could not start the camera. Allow camera permission and try again.');
+    } catch (webcamError) {
+      setMessage(describeCameraError(webcamError));
       stopCamera();
     } finally {
       setIsCameraStarting(false);
@@ -583,6 +593,8 @@ export default function UserPanel() {
         </section>
       )}
 
+      {receiver && <LocationMap />}
+
       {receiver && assignments.length > 0 && (
         <>
           <section className="user-summary">
@@ -678,14 +690,28 @@ export default function UserPanel() {
                 )}
 
                 {!isCameraActive && canAuthenticate && (
-                  <button
-                    className="user-primary-btn"
-                    disabled={isCameraStarting}
-                    onClick={startCamera}
-                    type="button"
-                  >
-                    {isCameraStarting ? 'Starting Camera...' : 'Start Face Verification'}
-                  </button>
+                  <>
+                    <label className="form-group" htmlFor="userCameraDeviceIndex">
+                      <span>Webcam Selection</span>
+                      <select
+                        disabled={isCameraStarting}
+                        id="userCameraDeviceIndex"
+                        onChange={(event) => setCameraDeviceIndex(Number(event.target.value))}
+                        value={cameraDeviceIndex}
+                      >
+                        <option value={0}>Camera 0{videoDevices[0]?.label ? ` - ${videoDevices[0].label}` : ''}</option>
+                        <option value={1}>Camera 1{videoDevices[1]?.label ? ` - ${videoDevices[1].label}` : ''}</option>
+                      </select>
+                    </label>
+                    <button
+                      className="user-primary-btn"
+                      disabled={isCameraStarting}
+                      onClick={startCamera}
+                      type="button"
+                    >
+                      {isCameraStarting ? 'Starting Camera...' : 'Start Face Verification'}
+                    </button>
+                  </>
                 )}
 
                 <div className={`user-camera ${isCameraActive ? 'active' : ''}`}>
